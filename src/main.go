@@ -164,7 +164,7 @@ func updateProcessedPaths(requestID, processedPath string) error {
 	return nil
 }
 
-func restoreObject(svc *s3.S3, bucketName, key string) {
+func restoreObject(svc *s3.S3, bucketName, key string) error {
 	copyInput := &s3.CopyObjectInput{
 		Bucket:       aws.String(bucketName),
 		CopySource:   aws.String(fmt.Sprintf("%s/%s", bucketName, key)),
@@ -174,11 +174,11 @@ func restoreObject(svc *s3.S3, bucketName, key string) {
 
 	_, err := svc.CopyObject(copyInput)
 	if err != nil {
-		log.Printf("Failed to restore object %s: %v\n", key, err)
-		return
+		return fmt.Errorf("failed to restore object %s: %v", key, err)
 	}
 
 	fmt.Printf("Object %s restored to STANDARD storage class\n", key)
+	return nil
 }
 
 func restoreObjectsInPath(bucketPath, region, requestID string) {
@@ -206,7 +206,13 @@ func restoreObjectsInPath(bucketPath, region, requestID string) {
 	err = svc.ListObjectsV2Pages(params, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
 		for _, obj := range page.Contents {
 			if *obj.StorageClass == "REDUCED_REDUNDANCY" {
-				restoreObject(svc, bucketName, *obj.Key)
+				err := restoreObject(svc, bucketName, *obj.Key)
+				if err != nil {
+					log.Printf("Error restoring object %s: %v\n", *obj.Key, err)
+					continue
+				}
+				// Wait for a few seconds to ensure the object is processed before moving on to the next
+				time.Sleep(2 * time.Second)
 			}
 		}
 		return true
