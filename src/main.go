@@ -197,11 +197,12 @@ func restoreObject(svc *s3.S3, bucketName, key string) error {
 	return nil
 }
 
-func restoreObjectsInPath(bucketPath, region, requestID string) {
+func restoreObjectsInPath(bucketPath, region, requestID string, failedPaths *[]string) {
 	log.Printf("Starting to process bucket path: %s\n", bucketPath)
 	parts := strings.SplitN(bucketPath, "/", 2)
 	if len(parts) < 2 {
 		log.Printf("Invalid bucket path: %s\n", bucketPath)
+		*failedPaths = append(*failedPaths, bucketPath)
 		return
 	}
 	bucketName, prefix := parts[0], parts[1]
@@ -238,6 +239,7 @@ func restoreObjectsInPath(bucketPath, region, requestID string) {
 
 	if err != nil {
 		log.Printf("Failed to list objects for bucket path %s: %v\n", bucketPath, err)
+		*failedPaths = append(*failedPaths, bucketPath)
 		return
 	}
 
@@ -262,6 +264,7 @@ func main() {
 
 	requestID := generateRequestID()
 	bucketPathsList := strings.Split(*bucketPaths, ",")
+	var failedPaths []string
 
 	err := createDBAndRecord(requestID, bucketPathsList, *ttl)
 	if err != nil {
@@ -269,7 +272,16 @@ func main() {
 	}
 
 	for _, path := range bucketPathsList {
-		restoreObjectsInPath(path, *region, requestID)
+		restoreObjectsInPath(path, *region, requestID, &failedPaths)
+	}
+
+	if len(failedPaths) > 0 {
+		failedPathsJSON, _ := json.Marshal(failedPaths)
+		message := fmt.Sprintf("The following paths failed to be processed for Request ID: %s\nFailed Paths: %s\n", requestID, failedPathsJSON)
+		if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), message); err != nil {
+			log.Printf("Error sending Slack notification for failed paths: %v\n", err)
+		}
+		log.Println(message)
 	}
 
 	fmt.Printf("Restore process completed for Request ID: %s\n", requestID)
