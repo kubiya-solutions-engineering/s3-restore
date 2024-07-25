@@ -1,0 +1,68 @@
+# This file contains the tool definitions for the approval calling logic
+tools:
+  - name: s3-restore
+    image: golang:latest
+    description: Initiates the restore process for objects from S3 Reduced Redundancy storage class.
+    alias: s3-restore
+    content: |
+      # Set default values for environment variables
+      REPO_URL="${REPO_URL:-https://github.com/kubiya-solutions-engineering/s3-restore}"
+      REPO_NAME="${REPO_NAME:-s3-restore}"
+      SOURCE_CODE_DIR="${SOURCE_CODE_DIR:-/src}"
+      REPO_BRANCH="${REPO_BRANCH:-main}"
+      REPO_DIR="${REPO_DIR:-$REPO_NAME}"
+      BIN_DIR="${BIN_DIR:-/usr/local/bin}"
+      APT_CACHE_DIR="${APT_CACHE_DIR:-/var/cache/apt/archives}"
+      PIP_CACHE_DIR="${PIP_CACHE_DIR:-/var/cache/pip}"
+
+      # Create cache directories
+      mkdir -p "$APT_CACHE_DIR"
+      mkdir -p "$BIN_DIR"
+      mkdir -p "$PIP_CACHE_DIR"
+
+      # Clone repository if not already cloned
+      if [ ! -d "$REPO_DIR" ]; then
+        if [ -n "$GH_TOKEN" ]; then
+          GIT_ASKPASS_ENV=$(mktemp)
+          chmod +x "$GIT_ASKPASS_ENV"
+          echo -e "#!/bin/sh\necho \$GH_TOKEN" > "$GIT_ASKPASS_ENV"
+          GIT_ASKPASS="$GIT_ASKPASS_ENV" git clone --branch "$REPO_BRANCH" "https://$GH_TOKEN@$(echo $REPO_URL | sed 's|https://||')" "$REPO_DIR" > /dev/null
+          rm "$GIT_ASKPASS_ENV"
+        else
+          git clone --branch "$REPO_BRANCH" "$REPO_URL" "$REPO_DIR" > /dev/null
+        fi
+      fi
+
+      # cd into the cloned repo
+      cd "${REPO_DIR}/${SOURCE_CODE_DIR}"
+
+      # Build the Go script
+      go build -o s3-restore
+
+      # Make the Go script executable and run it
+      export PATH="${PATH}:/${REPO_DIR}/${SOURCE_CODE_DIR}"
+      exec ./s3-restore --ttl "{{ .days }}" --bucket_paths "{{ .bucket_paths }}" --region "{{ .region }}"
+    args:
+      - name: days
+        description: The number of days to keep the restored objects (optional, default is 180)
+        required: false
+      - name: bucket_paths
+        description: The list of S3 bucket paths to restore, as a comma-separated string
+        required: true
+      - name: region
+        description: The AWS region
+        required: true
+    env:
+      - AWS_PROFILE
+      - SLACK_API_TOKEN
+      - OPERATING_SLACK_CHANNEL
+      - KUBIYA_AGENT_UUID
+      - KUBIYA_USER_ORG
+      - KUBIYA_API_KEY
+      - GH_TOKEN
+    with_volumes:
+      - name: sqlite_data
+        path: /sqlite_data
+    with_files:
+      - source: $HOME/.aws/credentials
+        destination: /root/.aws/credentials
