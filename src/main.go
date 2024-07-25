@@ -189,8 +189,8 @@ func restoreObject(svc *s3.S3, bucketName, key string) error {
 		return fmt.Errorf("failed to verify storage class for object %s: %v", key, err)
 	}
 
-	if *headOutput.StorageClass != "STANDARD" {
-		return fmt.Errorf("storage class for object %s is not STANDARD, it is %s", key, *headOutput.StorageClass)
+	if headOutput.StorageClass == nil || *headOutput.StorageClass != "STANDARD" {
+		return fmt.Errorf("storage class for object %s is not STANDARD, it is %v", key, headOutput.StorageClass)
 	}
 
 	log.Printf("Object %s restored to STANDARD storage class\n", key)
@@ -224,7 +224,7 @@ func restoreObjectsInPath(bucketPath, region, requestID string, failedPaths *[]s
 	err = svc.ListObjectsV2Pages(params, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
 		log.Printf("Listing objects in bucket path: %s\n", bucketPath)
 		for _, obj := range page.Contents {
-			if *obj.StorageClass == "REDUCED_REDUNDANCY" {
+			if obj.StorageClass != nil && *obj.StorageClass == "REDUCED_REDUNDANCY" {
 				err := restoreObject(svc, bucketName, *obj.Key)
 				if err != nil {
 					log.Printf("Error restoring object %s: %v\n", *obj.Key, err)
@@ -246,6 +246,7 @@ func restoreObjectsInPath(bucketPath, region, requestID string, failedPaths *[]s
 	err = updateProcessedPaths(requestID, bucketPath)
 	if err != nil {
 		log.Printf("Failed to update processed paths for Request ID %s: %v\n", requestID, err)
+		*failedPaths = append(*failedPaths, bucketPath)
 	}
 }
 
