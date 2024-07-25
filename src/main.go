@@ -18,6 +18,7 @@ import (
 	"github.com/aws/aws-sdk-go/aws/session"
 	"github.com/aws/aws-sdk-go/service/s3"
 	_ "github.com/mattn/go-sqlite3"
+	"github.com/slack-go/slack"
 )
 
 type RestoreRequest struct {
@@ -27,12 +28,6 @@ type RestoreRequest struct {
 	ProcessedPaths []string `json:"processed_paths"`
 	CreatedAt      string   `json:"created_at"`
 	UpdatedAt      string   `json:"updated_at"`
-}
-
-type SlackMessage struct {
-	Channel string      `json:"channel"`
-	Text    string      `json:"text,omitempty"`
-	Blocks  interface{} `json:"blocks,omitempty"`
 }
 
 func generateRequestID() string {
@@ -51,36 +46,11 @@ func sendSlackNotification(channel, message string) {
 		return
 	}
 
-	slackMessage := SlackMessage{
-		Channel: channel,
-		Text:    message,
-	}
+	api := slack.New(slackToken)
 
-	slackMessageBytes, err := json.Marshal(slackMessage)
-	if err != nil {
-		log.Printf("Failed to marshal Slack message: %v\n", err)
-		return
-	}
-
-	req, err := http.NewRequest("POST", "https://slack.com/api/chat.postMessage", bytes.NewBuffer(slackMessageBytes))
-	if err != nil {
-		log.Printf("Failed to create Slack request: %v\n", err)
-		return
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", slackToken))
-
-	client := &http.Client{}
-	resp, err := client.Do(req)
+	_, _, err := api.PostMessage(channel, slack.MsgOptionText(message, false))
 	if err != nil {
 		log.Printf("Failed to send Slack message: %v\n", err)
-		return
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode >= 300 {
-		log.Printf("Error sending Slack message: %v\n", resp.Status)
 	}
 }
 
