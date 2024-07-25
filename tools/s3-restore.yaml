@@ -37,6 +37,7 @@ tools:
       cd "${REPO_DIR}/${SOURCE_CODE_DIR}"
 
       # Build the Go script
+      go get -d ./...
       go build -o s3-restore
 
       # Make the Go script executable and run it

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"bytes"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -9,7 +8,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -39,11 +37,11 @@ func generateRequestID() string {
 	return hex.EncodeToString(bytes)
 }
 
-func sendSlackNotification(channel, message string) {
+func sendSlackNotification(channel, message string) error {
 	slackToken := os.Getenv("SLACK_API_TOKEN")
 	if slackToken == "" {
 		log.Println("No SLACK_API_TOKEN set. Slack messages will not be sent.")
-		return
+		return fmt.Errorf("SLACK_API_TOKEN is not set")
 	}
 
 	api := slack.New(slackToken)
@@ -51,7 +49,10 @@ func sendSlackNotification(channel, message string) {
 	_, _, err := api.PostMessage(channel, slack.MsgOptionText(message, false))
 	if err != nil {
 		log.Printf("Failed to send Slack message: %v\n", err)
+		return err
 	}
+
+	return nil
 }
 
 func createDBAndRecord(requestID string, bucketPaths []string, ttl int) error {
@@ -87,7 +88,9 @@ func createDBAndRecord(requestID string, bucketPaths []string, ttl int) error {
 
 	message := fmt.Sprintf("Created database record for Request ID: %s\nBucket Paths: %s\nTTL: %d\nProcessed Paths: %s\nCreated At: %s\nUpdated At: %s\n",
 		requestID, bucketPathsJSON, ttl, processedPathsJSON, time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339))
-	sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), message)
+	if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), message); err != nil {
+		log.Printf("Error sending Slack notification: %v\n", err)
+	}
 
 	log.Println(message)
 	return nil
@@ -132,7 +135,9 @@ func updateProcessedPaths(requestID, processedPath string) error {
 	}
 
 	message := fmt.Sprintf("Updated database record for Request ID: %s\nRemaining Bucket Paths: %s\nProcessed Paths: %s\n", requestID, bucketPathsJSON, processedPathsJSON)
-	sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), message)
+	if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), message); err != nil {
+		log.Printf("Error sending Slack notification: %v\n", err)
+	}
 
 	log.Println(message)
 
@@ -143,7 +148,9 @@ func updateProcessedPaths(requestID, processedPath string) error {
 			return fmt.Errorf("failed to delete record: %w", err)
 		}
 		message = fmt.Sprintf("All paths processed for Request ID: %s. Record deleted.\n", requestID)
-		sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), message)
+		if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), message); err != nil {
+			log.Printf("Error sending Slack notification: %v\n", err)
+		}
 		fmt.Print(message)
 	}
 
