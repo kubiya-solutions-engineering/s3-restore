@@ -177,7 +177,21 @@ func restoreObject(svc *s3.S3, bucketName, key string) error {
 		return fmt.Errorf("failed to restore object %s: %v", key, err)
 	}
 
-	fmt.Printf("Object %s restored to STANDARD storage class\n", key)
+	// Check if the object storage class was updated successfully
+	headInput := &s3.HeadObjectInput{
+		Bucket: aws.String(bucketName),
+		Key:    aws.String(key),
+	}
+	headOutput, err := svc.HeadObject(headInput)
+	if err != nil {
+		return fmt.Errorf("failed to verify storage class for object %s: %v", key, err)
+	}
+
+	if *headOutput.StorageClass != "STANDARD" {
+		return fmt.Errorf("storage class for object %s is not STANDARD, it is %s", key, *headOutput.StorageClass)
+	}
+
+	log.Printf("Object %s restored to STANDARD storage class\n", key)
 	return nil
 }
 
