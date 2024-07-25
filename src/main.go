@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -8,6 +9,8 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"net/http"
+	"os"
 	"strings"
 	"time"
 
@@ -26,6 +29,12 @@ type RestoreRequest struct {
 	UpdatedAt      string   `json:"updated_at"`
 }
 
+type SlackMessage struct {
+	Channel string      `json:"channel"`
+	Text    string      `json:"text,omitempty"`
+	Blocks  interface{} `json:"blocks,omitempty"`
+}
+
 func generateRequestID() string {
 	bytes := make([]byte, 16)
 	_, err := rand.Read(bytes)
@@ -33,6 +42,46 @@ func generateRequestID() string {
 		log.Fatalf("Failed to generate request ID: %v", err)
 	}
 	return hex.EncodeToString(bytes)
+}
+
+func sendSlackNotification(channel, message string) {
+	slackToken := os.Getenv("SLACK_API_TOKEN")
+	if slackToken == "" {
+		log.Println("No SLACK_API_TOKEN set. Slack messages will not be sent.")
+		return
+	}
+
+	slackMessage := SlackMessage{
+		Channel: channel,
+		Text:    message,
+	}
+
+	slackMessageBytes, err := json.Marshal(slackMessage)
+	if err != nil {
+		log.Printf("Failed to marshal Slack message: %v\n", err)
+		return
+	}
+
+	req, err := http.NewRequest("POST", "https://slack.com/api/chat.postMessage", bytes.NewBuffer(slackMessageBytes))
+	if err != nil {
+		log.Printf("Failed to create Slack request: %v\n", err)
+		return
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", fmt.Sprintf("Bearer %s", slackToken))
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		log.Printf("Failed to send Slack message: %v\n", err)
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode >= 300 {
+		log.Printf("Error sending Slack message: %v\n", resp.Status)
+	}
 }
 
 func createDBAndRecord(requestID string, bucketPaths []string, ttl int) error {
@@ -66,8 +115,11 @@ func createDBAndRecord(requestID string, bucketPaths []string, ttl int) error {
 		return fmt.Errorf("failed to insert record: %w", err)
 	}
 
-	log.Printf("Created database record for Request ID: %s\nBucket Paths: %s\nTTL: %d\nProcessed Paths: %s\nCreated At: %s\nUpdated At: %s\n",
+	message := fmt.Sprintf("Created database record for Request ID: %s\nBucket Paths: %s\nTTL: %d\nProcessed Paths: %s\nCreated At: %s\nUpdated At: %s\n",
 		requestID, bucketPathsJSON, ttl, processedPathsJSON, time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339))
+	sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), message)
+
+	log.Println(message)
 	return nil
 }
 
@@ -109,7 +161,10 @@ func updateProcessedPaths(requestID, processedPath string) error {
 		return fmt.Errorf("failed to update paths: %w", err)
 	}
 
-	log.Printf("Updated database record for Request ID: %s\nRemaining Bucket Paths: %s\nProcessed Paths: %s\n", requestID, bucketPathsJSON, processedPathsJSON)
+	message := fmt.Sprintf("Updated database record for Request ID: %s\nRemaining Bucket Paths: %s\nProcessed Paths: %s\n", requestID, bucketPathsJSON, processedPathsJSON)
+	sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), message)
+
+	log.Println(message)
 
 	if len(bp) == 0 {
 		deleteQuery := "DELETE FROM restore_requests WHERE request_id = ?"
@@ -117,7 +172,9 @@ func updateProcessedPaths(requestID, processedPath string) error {
 		if err != nil {
 			return fmt.Errorf("failed to delete record: %w", err)
 		}
-		fmt.Printf("All paths processed for Request ID: %s. Record deleted.\n", requestID)
+		message = fmt.Sprintf("All paths processed for Request ID: %s. Record deleted.\n", requestID)
+		sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), message)
+		fmt.Print(message)
 	}
 
 	return nil
