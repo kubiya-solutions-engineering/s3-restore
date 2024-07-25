@@ -165,6 +165,8 @@ func updateProcessedPaths(requestID, processedPath string) error {
 }
 
 func restoreObject(svc *s3.S3, bucketName, key string) error {
+	log.Printf("Attempting to restore object: %s/%s", bucketName, key)
+
 	copyInput := &s3.CopyObjectInput{
 		Bucket:       aws.String(bucketName),
 		CopySource:   aws.String(fmt.Sprintf("%s/%s", bucketName, key)),
@@ -196,6 +198,7 @@ func restoreObject(svc *s3.S3, bucketName, key string) error {
 }
 
 func restoreObjectsInPath(bucketPath, region, requestID string) {
+	log.Printf("Starting to process bucket path: %s\n", bucketPath)
 	parts := strings.SplitN(bucketPath, "/", 2)
 	if len(parts) < 2 {
 		log.Printf("Invalid bucket path: %s\n", bucketPath)
@@ -218,6 +221,7 @@ func restoreObjectsInPath(bucketPath, region, requestID string) {
 	}
 
 	err = svc.ListObjectsV2Pages(params, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
+		log.Printf("Listing objects in bucket path: %s\n", bucketPath)
 		for _, obj := range page.Contents {
 			if *obj.StorageClass == "REDUCED_REDUNDANCY" {
 				err := restoreObject(svc, bucketName, *obj.Key)
