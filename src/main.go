@@ -93,7 +93,7 @@ func createDBAndRecord(requestID string, bucketPaths []string, ttl int) error {
 		return fmt.Errorf("failed to insert record: %w", err)
 	}
 
-	message := fmt.Sprintf("Created database record for Request ID: %s\nBucket Paths: %s\nTTL: %d\nProcessed Paths: %s\nCreated At: %s\nUpdated At: %s\n",
+	message := fmt.Sprintf("*:memo: Created database record for Request ID:* *%s*\n*Bucket Paths:* `%s`\n*TTL:* `%d` days\n*Processed Paths:* `%s`\n*Created At:* `%s`\n*Updated At:* `%s`\n",
 		requestID, bucketPathsJSON, ttl, processedPathsJSON, time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339))
 	if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), message); err != nil {
 		log.Printf("Error sending Slack notification: %v\n", err)
@@ -141,7 +141,7 @@ func updateProcessedPaths(requestID, processedPath string) error {
 		return fmt.Errorf("failed to update paths: %w", err)
 	}
 
-	message := fmt.Sprintf("Updated database record for Request ID: %s\nRemaining Bucket Paths: %s\nProcessed Paths: %s\n", requestID, bucketPathsJSON, processedPathsJSON)
+	message := fmt.Sprintf("*:hourglass_flowing_sand: Updated database record for Request ID:* *%s*\n*Remaining Bucket Paths:* `%s`\n*Processed Paths:* `%s`\n", requestID, bucketPathsJSON, processedPathsJSON)
 	if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), message); err != nil {
 		log.Printf("Error sending Slack notification: %v\n", err)
 	}
@@ -154,7 +154,7 @@ func updateProcessedPaths(requestID, processedPath string) error {
 		if err != nil {
 			return fmt.Errorf("failed to delete record: %w", err)
 		}
-		message = fmt.Sprintf("All paths processed for Request ID: %s. Record deleted.\n", requestID)
+		message = fmt.Sprintf("*:white_check_mark: All paths processed for Request ID:* *%s*. *Record deleted.*\n", requestID)
 		if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), message); err != nil {
 			log.Printf("Error sending Slack notification: %v\n", err)
 		}
@@ -278,12 +278,12 @@ func main() {
 
 	if len(failedPaths) > 0 {
 		failedPathsJSON, _ := json.Marshal(failedPaths)
-		message := fmt.Sprintf("The following paths failed to be processed for Request ID: %s\nFailed Paths: %s\n", requestID, failedPathsJSON)
+		message := fmt.Sprintf(":x: *The following paths failed to be processed for Request ID:* *%s*\n*Failed Paths:* `%s`\n", requestID, failedPathsJSON)
 		if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), message); err != nil {
 			log.Printf("Error sending Slack notification for failed paths: %v\n", err)
 		}
 		log.Println(message)
 	}
 
-	fmt.Printf("Restore process completed for Request ID: %s\n", requestID)
+	fmt.Printf(":white_check_mark: *Restore process completed for Request ID:* *%s*\n", requestID)
 }
