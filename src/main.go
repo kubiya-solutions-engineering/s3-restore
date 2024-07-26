@@ -28,6 +28,8 @@ type RestoreRequest struct {
 	UpdatedAt      string   `json:"updated_at"`
 }
 
+var messageTimestamp string
+
 func generateRequestID() string {
 	bytes := make([]byte, 16)
 	_, err := rand.Read(bytes)
@@ -53,10 +55,18 @@ func sendSlackNotification(channel, threadTS string, blocks []slack.Block) error
 		opts = append(opts, slack.MsgOptionTS(threadTS))
 	}
 
-	_, _, err := api.PostMessage(channel, opts...)
+	if messageTimestamp != "" {
+		opts = append(opts, slack.MsgOptionUpdate(messageTimestamp))
+	}
+
+	_, newTimestamp, err := api.PostMessage(channel, opts...)
 	if err != nil {
 		log.Printf("Failed to send Slack message: %v\n", err)
 		return err
+	}
+
+	if messageTimestamp == "" {
+		messageTimestamp = newTimestamp
 	}
 
 	return nil
