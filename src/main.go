@@ -37,7 +37,7 @@ func generateRequestID() string {
 	return hex.EncodeToString(bytes)
 }
 
-func sendSlackNotification(channel, threadTS string, blocks []slack.Block) error {
+func sendSlackNotification(channel, threadTS, message string) error {
 	slackToken := os.Getenv("SLACK_API_TOKEN")
 	if slackToken == "" {
 		log.Println("No SLACK_API_TOKEN set. Slack messages will not be sent.")
@@ -46,7 +46,7 @@ func sendSlackNotification(channel, threadTS string, blocks []slack.Block) error
 
 	api := slack.New(slackToken)
 	opts := []slack.MsgOption{
-		slack.MsgOptionBlocks(blocks...),
+		slack.MsgOptionText(message, false),
 	}
 
 	if threadTS != "" {
@@ -93,46 +93,13 @@ func createDBAndRecord(requestID string, bucketPaths []string, ttl int) error {
 		return fmt.Errorf("failed to insert record: %w", err)
 	}
 
-	blocks := []slack.Block{
-		slack.NewHeaderBlock(&slack.TextBlockObject{
-			Type: slack.PlainTextType,
-			Text: ":memo: Created database record",
-		}),
-		slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("*Request ID:* `%s`\n*TTL:* `%d` days\n*Created At:* `%s`\n*Updated At:* `%s`\n",
-					requestID, ttl, time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339)),
-			},
-			nil,
-			nil,
-		),
-		slack.NewDividerBlock(),
-		slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: "*Bucket Paths:*",
-			},
-			nil,
-			nil,
-		),
-	}
-	for _, path := range bucketPaths {
-		blocks = append(blocks, slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("- `%s`", path),
-			},
-			nil,
-			nil,
-		))
-	}
-
-	if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), blocks); err != nil {
+	message := fmt.Sprintf("*:memo: Created database record for Request ID:* *%s*\n*Bucket Paths:* `%s`\n*TTL:* `%d` days\n*Processed Paths:* `%s`\n*Created At:* `%s`\n*Updated At:* `%s`\n",
+		requestID, bucketPathsJSON, ttl, processedPathsJSON, time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339))
+	if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), message); err != nil {
 		log.Printf("Error sending Slack notification: %v\n", err)
 	}
 
-	log.Println("Created database record:", requestID)
+	log.Println(message)
 	return nil
 }
 
@@ -174,64 +141,12 @@ func updateProcessedPaths(requestID, processedPath string) error {
 		return fmt.Errorf("failed to update paths: %w", err)
 	}
 
-	blocks := []slack.Block{
-		slack.NewHeaderBlock(&slack.TextBlockObject{
-			Type: slack.PlainTextType,
-			Text: ":hourglass_flowing_sand: Updated database record",
-		}),
-		slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("*Request ID:* `%s`\n*Updated At:* `%s`\n",
-					requestID, time.Now().UTC().Format(time.RFC3339)),
-			},
-			nil,
-			nil,
-		),
-		slack.NewDividerBlock(),
-		slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: "*Remaining Bucket Paths:*",
-			},
-			nil,
-			nil,
-		),
-	}
-	for _, path := range bp {
-		blocks = append(blocks, slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("- `%s`", path),
-			},
-			nil,
-			nil,
-		))
-	}
-	blocks = append(blocks, slack.NewDividerBlock(), slack.NewSectionBlock(
-		&slack.TextBlockObject{
-			Type: slack.MarkdownType,
-			Text: "*Processed Paths:*",
-		},
-		nil,
-		nil,
-	))
-	for _, path := range pp {
-		blocks = append(blocks, slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("- `%s`", path),
-			},
-			nil,
-			nil,
-		))
-	}
-
-	if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), blocks); err != nil {
+	message := fmt.Sprintf("*:hourglass_flowing_sand: Updated database record for Request ID:* *%s*\n*Remaining Bucket Paths:* `%s`\n*Processed Paths:* `%s`\n", requestID, bucketPathsJSON, processedPathsJSON)
+	if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), message); err != nil {
 		log.Printf("Error sending Slack notification: %v\n", err)
 	}
 
-	log.Println("Updated database record:", requestID)
+	log.Println(message)
 
 	if len(bp) == 0 {
 		deleteQuery := "DELETE FROM restore_requests WHERE request_id = ?"
@@ -239,13 +154,8 @@ func updateProcessedPaths(requestID, processedPath string) error {
 		if err != nil {
 			return fmt.Errorf("failed to delete record: %w", err)
 		}
-		message := fmt.Sprintf(":white_check_mark: *All paths processed for Request ID:* *%s*. *Record deleted.*\n", requestID)
-		if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), []slack.Block{
-			slack.NewSectionBlock(&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: message,
-			}, nil, nil),
-		}); err != nil {
+		message = fmt.Sprintf("*:white_check_mark: All paths processed for Request ID:* *%s*. *Record deleted.*\n", requestID)
+		if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), message); err != nil {
 			log.Printf("Error sending Slack notification: %v\n", err)
 		}
 		fmt.Print(message)
@@ -279,8 +189,8 @@ func restoreObject(svc *s3.S3, bucketName, key string) error {
 		return fmt.Errorf("failed to verify storage class for object %s: %v", key, err)
 	}
 
-	if *headOutput.StorageClass != "STANDARD" {
-		return fmt.Errorf("storage class for object %s is not STANDARD, it is %s", key, *headOutput.StorageClass)
+	if headOutput.StorageClass == nil || *headOutput.StorageClass != "STANDARD" {
+		return fmt.Errorf("storage class for object %s is not STANDARD, it is %v", key, headOutput.StorageClass)
 	}
 
 	log.Printf("Object %s restored to STANDARD storage class\n", key)
@@ -314,11 +224,10 @@ func restoreObjectsInPath(bucketPath, region, requestID string, failedPaths *[]s
 	err = svc.ListObjectsV2Pages(params, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
 		log.Printf("Listing objects in bucket path: %s\n", bucketPath)
 		for _, obj := range page.Contents {
-			if *obj.StorageClass == "REDUCED_REDUNDANCY" {
+			if obj.StorageClass != nil && *obj.StorageClass == "REDUCED_REDUNDANCY" {
 				err := restoreObject(svc, bucketName, *obj.Key)
 				if err != nil {
 					log.Printf("Error restoring object %s: %v\n", *obj.Key, err)
-					*failedPaths = append(*failedPaths, bucketPath)
 					continue
 				}
 				// Wait for a few seconds to ensure the object is processed before moving on to the next
@@ -368,61 +277,13 @@ func main() {
 	}
 
 	if len(failedPaths) > 0 {
-		blocks := []slack.Block{
-			slack.NewHeaderBlock(&slack.TextBlockObject{
-				Type: slack.PlainTextType,
-				Text: ":x: The following paths failed to be processed",
-			}),
-			slack.NewSectionBlock(
-				&slack.TextBlockObject{
-					Type: slack.MarkdownType,
-					Text: fmt.Sprintf("*Request ID:* `%s`\n", requestID),
-				},
-				nil,
-				nil,
-			),
-			slack.NewDividerBlock(),
-			slack.NewSectionBlock(
-				&slack.TextBlockObject{
-					Type: slack.MarkdownType,
-					Text: "*Failed Paths:*",
-				},
-				nil,
-				nil,
-			),
-		}
-		for _, path := range failedPaths {
-			blocks = append(blocks, slack.NewSectionBlock(
-				&slack.TextBlockObject{
-					Type: slack.MarkdownType,
-					Text: fmt.Sprintf("- `%s`", path),
-				},
-				nil,
-				nil,
-			))
-		}
-		if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), blocks); err != nil {
+		failedPathsJSON, _ := json.Marshal(failedPaths)
+		message := fmt.Sprintf(":x: *The following paths failed to be processed for Request ID:* *%s*\n*Failed Paths:* `%s`\n", requestID, failedPathsJSON)
+		if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), message); err != nil {
 			log.Printf("Error sending Slack notification for failed paths: %v\n", err)
 		}
-		log.Println("Failed paths:", failedPaths)
+		log.Println(message)
 	}
 
-	blocks := []slack.Block{
-		slack.NewHeaderBlock(&slack.TextBlockObject{
-			Type: slack.PlainTextType,
-			Text: ":white_check_mark: Restore process completed",
-		}),
-		slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("*Request ID:* `%s`\n", requestID),
-			},
-			nil,
-			nil,
-		),
-	}
-	if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), blocks); err != nil {
-		log.Printf("Error sending Slack notification for completion: %v\n", err)
-	}
-	fmt.Printf("Restore process completed for Request ID: %s\n", requestID)
+	fmt.Printf(":white_check_mark: *Restore process completed for Request ID:* *%s*\n", requestID)
 }
