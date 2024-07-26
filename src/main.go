@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/rand"
 	"database/sql"
 	"encoding/hex"
@@ -9,12 +10,18 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
-	"github.com/aws/aws-sdk-go/aws"
-	"github.com/aws/aws-sdk-go/aws/session"
-	"github.com/aws/aws-sdk-go/service/s3"
+	"github.com/aws/aws-sdk-go-v2/aws"
+	"github.com/aws/aws-sdk-go-v2/config"
+	"github.com/aws/aws-sdk-go-v2/credentials/stscreds"
+	"github.com/aws/aws-sdk-go-v2/service/s3"
+	"github.com/aws/aws-sdk-go-v2/service/s3/types"
+	"github.com/aws/aws-sdk-go-v2/service/sts"
+	"github.com/go-ini/ini"
 	_ "github.com/mattn/go-sqlite3"
 	"github.com/slack-go/slack"
 )
@@ -28,7 +35,27 @@ type RestoreRequest struct {
 	UpdatedAt      string   `json:"updated_at"`
 }
 
-var messageTimestamp string
+type customCredentialsProvider struct {
+	creds *aws.Credentials
+	mu    sync.RWMutex
+}
+
+func (p *customCredentialsProvider) Retrieve(ctx context.Context) (aws.Credentials, error) {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	return *p.creds, nil
+}
+
+func (p *customCredentialsProvider) UpdateCredentials(newCreds aws.Credentials) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	*p.creds = newCreds
+}
+
+var (
+	messageTimestamp string
+	credsProvider    *customCredentialsProvider
+)
 
 func generateRequestID() string {
 	bytes := make([]byte, 16)
@@ -264,17 +291,17 @@ func updateProcessedPaths(requestID, processedPath string) error {
 	return nil
 }
 
-func restoreObject(svc *s3.S3, bucketName, key string) error {
+func restoreObject(svc *s3.Client, bucketName, key string) error {
 	log.Printf("Attempting to restore object: %s/%s", bucketName, key)
 
 	copyInput := &s3.CopyObjectInput{
 		Bucket:       aws.String(bucketName),
 		CopySource:   aws.String(fmt.Sprintf("%s/%s", bucketName, key)),
 		Key:          aws.String(key),
-		StorageClass: aws.String("STANDARD"),
+		StorageClass: "STANDARD",
 	}
 
-	_, err := svc.CopyObject(copyInput)
+	_, err := svc.CopyObject(context.TODO(), copyInput)
 	if err != nil {
 		return fmt.Errorf("failed to restore object %s: %v", key, err)
 	}
@@ -284,12 +311,12 @@ func restoreObject(svc *s3.S3, bucketName, key string) error {
 		Bucket: aws.String(bucketName),
 		Key:    aws.String(key),
 	}
-	headOutput, err := svc.HeadObject(headInput)
+	headOutput, err := svc.HeadObject(context.TODO(), headInput)
 	if err != nil {
 		return fmt.Errorf("failed to verify storage class for object %s: %v", key, err)
 	}
 
-	if headOutput.StorageClass == nil || *headOutput.StorageClass != "STANDARD" {
+	if headOutput.StorageClass == "" || headOutput.StorageClass != "STANDARD" {
 		return fmt.Errorf("storage class for object %s is not STANDARD, it is %v", key, headOutput.StorageClass)
 	}
 
@@ -297,7 +324,13 @@ func restoreObject(svc *s3.S3, bucketName, key string) error {
 	return nil
 }
 
-func restoreObjectsInPath(bucketPath, region, requestID string, failedPaths *[]string) {
+func restoreObjectsInPath(bucketPath, region, requestID string, failedPaths *[]string, wg *sync.WaitGroup, ch chan struct{}) {
+	defer wg.Done()
+
+	// Acquire a slot
+	ch <- struct{}{}
+	defer func() { <-ch }()
+
 	log.Printf("Starting to process bucket path: %s\n", bucketPath)
 	parts := strings.SplitN(bucketPath, "/", 2)
 	if len(parts) < 2 {
@@ -307,24 +340,35 @@ func restoreObjectsInPath(bucketPath, region, requestID string, failedPaths *[]s
 	}
 	bucketName, prefix := parts[0], parts[1]
 
-	sess, err := session.NewSession(&aws.Config{
-		Region: aws.String(region)},
+	cfg, err := config.LoadDefaultConfig(context.TODO(),
+		config.WithRegion(region),
+		config.WithCredentialsProvider(credsProvider),
 	)
 	if err != nil {
-		log.Fatalf("Failed to create session: %v\n", err)
+		log.Printf("Failed to load AWS config: %v\n", err)
+		*failedPaths = append(*failedPaths, bucketPath)
+		return
 	}
 
-	svc := s3.New(sess)
+	svc := s3.NewFromConfig(cfg)
 
 	params := &s3.ListObjectsV2Input{
 		Bucket: aws.String(bucketName),
 		Prefix: aws.String(prefix),
 	}
 
-	err = svc.ListObjectsV2Pages(params, func(page *s3.ListObjectsV2Output, lastPage bool) bool {
-		log.Printf("Listing objects in bucket path: %s\n", bucketPath)
+	paginator := s3.NewListObjectsV2Paginator(svc, params)
+
+	for paginator.HasMorePages() {
+		page, err := paginator.NextPage(context.TODO())
+		if err != nil {
+			log.Printf("Failed to list objects for bucket path %s: %v\n", bucketPath, err)
+			*failedPaths = append(*failedPaths, bucketPath)
+			return
+		}
+
 		for _, obj := range page.Contents {
-			if obj.StorageClass != nil && *obj.StorageClass == "REDUCED_REDUNDANCY" {
+			if obj.StorageClass != types.ObjectStorageClassStandard {
 				err := restoreObject(svc, bucketName, *obj.Key)
 				if err != nil {
 					log.Printf("Error restoring object %s: %v\n", *obj.Key, err)
@@ -334,13 +378,6 @@ func restoreObjectsInPath(bucketPath, region, requestID string, failedPaths *[]s
 				time.Sleep(2 * time.Second)
 			}
 		}
-		return true
-	})
-
-	if err != nil {
-		log.Printf("Failed to list objects for bucket path %s: %v\n", bucketPath, err)
-		*failedPaths = append(*failedPaths, bucketPath)
-		return
 	}
 
 	err = updateProcessedPaths(requestID, bucketPath)
@@ -350,10 +387,69 @@ func restoreObjectsInPath(bucketPath, region, requestID string, failedPaths *[]s
 	}
 }
 
+func getRoleArnFromProfile(profile string) (string, error) {
+	credsFile := filepath.Join(os.Getenv("HOME"), ".aws", "credentials")
+	cfg, err := ini.Load(credsFile)
+	if err != nil {
+		return "", fmt.Errorf("failed to load AWS credentials file: %v", err)
+	}
+
+	section, err := cfg.GetSection(profile)
+	if err != nil {
+		return "", fmt.Errorf("failed to get profile %s: %v", profile, err)
+	}
+
+	roleArn, err := section.GetKey("role_arn")
+	if err != nil {
+		return "", fmt.Errorf("failed to get role_arn from profile %s: %v", profile, err)
+	}
+
+	return roleArn.String(), nil
+}
+
+func assumeRole(roleArn, region string) (aws.Credentials, error) {
+	cfg, err := config.LoadDefaultConfig(context.TODO(), config.WithRegion(region))
+	if err != nil {
+		return aws.Credentials{}, fmt.Errorf("failed to load AWS config: %v", err)
+	}
+
+	stsSvc := sts.NewFromConfig(cfg)
+
+	roleSessionName := fmt.Sprintf("kubiya-agent-s3-restore-%d", time.Now().Unix())
+	credsCache := aws.NewCredentialsCache(stscreds.NewAssumeRoleProvider(stsSvc, roleArn, func(p *stscreds.AssumeRoleOptions) {
+		p.RoleSessionName = roleSessionName
+	}))
+
+	creds, err := credsCache.Retrieve(context.TODO())
+	if err != nil {
+		return aws.Credentials{}, fmt.Errorf("failed to assume role: %v", err)
+	}
+
+	return creds, nil
+}
+
+func renewCredentials(roleArn, region string) {
+	ticker := time.NewTicker(30 * time.Minute)
+	defer ticker.Stop()
+
+	for range ticker.C {
+		newCreds, err := assumeRole(roleArn, region)
+		if err != nil {
+			log.Printf("Failed to renew credentials: %v", err)
+			continue
+		}
+
+		credsProvider.UpdateCredentials(newCreds)
+
+		log.Println("Successfully renewed credentials")
+	}
+}
+
 func main() {
 	bucketPaths := flag.String("bucket_paths", "", "Comma-separated list of S3 bucket paths to restore")
 	region := flag.String("region", "", "AWS region")
 	ttl := flag.Int("ttl", 30, "Time-to-live (TTL) in days for restored objects before reverting to original storage class")
+	profile := flag.String("profile", "default", "AWS profile to use")
 	flag.Parse()
 
 	if *bucketPaths == "" {
@@ -363,18 +459,38 @@ func main() {
 		log.Fatal("Please provide an AWS region")
 	}
 
+	roleArn, err := getRoleArnFromProfile(*profile)
+	if err != nil {
+		log.Fatalf("Failed to get role ARN from profile: %v", err)
+	}
+
+	initialCreds, err := assumeRole(roleArn, *region)
+	if err != nil {
+		log.Fatalf("Failed to assume role: %v", err)
+	}
+
+	credsProvider = &customCredentialsProvider{creds: &initialCreds}
+
+	go renewCredentials(roleArn, *region)
+
 	requestID := generateRequestID()
 	bucketPathsList := strings.Split(*bucketPaths, ",")
 	var failedPaths []string
 
-	err := createDBAndRecord(requestID, bucketPathsList, *ttl)
+	err = createDBAndRecord(requestID, bucketPathsList, *ttl)
 	if err != nil {
 		log.Fatalf("Failed to create DB record: %v\n", err)
 	}
 
+	var wg sync.WaitGroup
+	ch := make(chan struct{}, 5) // Limit to 5 concurrent routines
+
 	for _, path := range bucketPathsList {
-		restoreObjectsInPath(path, *region, requestID, &failedPaths)
+		wg.Add(1)
+		go restoreObjectsInPath(path, *region, requestID, &failedPaths, &wg, ch)
 	}
+
+	wg.Wait()
 
 	if len(failedPaths) > 0 {
 		failedPathsJSON, _ := json.Marshal(failedPaths)
