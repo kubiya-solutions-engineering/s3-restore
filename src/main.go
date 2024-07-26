@@ -29,7 +29,6 @@ type RestoreRequest struct {
 }
 
 var messageTimestamp string
-var currentObject string
 
 func generateRequestID() string {
 	bytes := make([]byte, 16)
@@ -118,14 +117,6 @@ func createDBAndRecord(requestID string, bucketPaths []string, ttl int) error {
 			nil,
 			nil,
 		),
-		slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: "*Current Object:* `None`",
-			},
-			nil,
-			nil,
-		),
 		slack.NewDividerBlock(),
 		slack.NewSectionBlock(
 			&slack.TextBlockObject{
@@ -201,8 +192,8 @@ func updateProcessedPaths(requestID, processedPath string) error {
 		slack.NewSectionBlock(
 			&slack.TextBlockObject{
 				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("*Request ID:* `%s`\n*Updated At:* `%s`\n*Current Object:* `%s`\n",
-					requestID, time.Now().UTC().Format(time.RFC3339), currentObject),
+				Text: fmt.Sprintf("*Request ID:* `%s`\n*Updated At:* `%s`\n",
+					requestID, time.Now().UTC().Format(time.RFC3339)),
 			},
 			nil,
 			nil,
@@ -274,8 +265,7 @@ func updateProcessedPaths(requestID, processedPath string) error {
 }
 
 func restoreObject(svc *s3.S3, bucketName, key string) error {
-	currentObject = fmt.Sprintf("%s/%s", bucketName, key)
-	log.Printf("Attempting to restore object: %s", currentObject)
+	log.Printf("Attempting to restore object: %s/%s", bucketName, key)
 
 	copyInput := &s3.CopyObjectInput{
 		Bucket:       aws.String(bucketName),
