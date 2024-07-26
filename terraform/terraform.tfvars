@@ -1,5 +1,5 @@
 agent_name         = "S3 Restore"
-kubiya_runner      = "aks-mg"
+kubiya_runner      = "vcluster-staging"
 agent_description  = "This agent restores objects from Reduced Redundancy."
 agent_instructions = <<EOT
 You are an intelligent agent that can assist with restoring objects from Reduced Redundancy storage class to Standard storage class.
@@ -7,10 +7,10 @@ You are an intelligent agent that can assist with restoring objects from Reduced
 ** You have access only to the commands you see on this prompt **
 EOT
 llm_model          = "azure/gpt-4o"
-agent_image        = "kubiya/base-agent:tools-v5"
+agent_image        = "kubiya/base-agent:tools-v6"
 
-secrets            = []
-integrations       = ["kubiyamichaelg", "slack", "github"]
+secrets            = ["TOOLS_GH_TOKEN"]
+integrations       = ["aws", "slack", "github"]
 users              = []
 groups             = ["Admin", "Users"]
 agent_tool_sources = ["https://github.com/kubiya-solutions-engineering/s3-restore/tools/*"]
