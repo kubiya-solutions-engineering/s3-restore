@@ -4,7 +4,7 @@ tools:
     image: golang:latest
     description: Initiates the restore process for objects from S3 Reduced Redundancy storage class.
     alias: s3-restore
-    long_running: true # set as a k8s job
+    # long_running: true # set as a k8s job
     content: |
       # Set default values for environment variables
       REPO_URL="${REPO_URL:-https://github.com/kubiya-solutions-engineering/s3-restore}"
@@ -23,11 +23,11 @@ tools:
 
       # Clone repository if not already cloned
       if [ ! -d "$REPO_DIR" ]; then
-        if [ -n "$GH_TOKEN" ]; then
+        if [ -n "$TOOLS_GH_TOKEN" ]; then
           GIT_ASKPASS_ENV=$(mktemp)
           chmod +x "$GIT_ASKPASS_ENV"
-          echo -e "#!/bin/sh\necho \$GH_TOKEN" > "$GIT_ASKPASS_ENV"
-          GIT_ASKPASS="$GIT_ASKPASS_ENV" git clone --branch "$REPO_BRANCH" "https://$GH_TOKEN@$(echo $REPO_URL | sed 's|https://||')" "$REPO_DIR" > /dev/null
+          echo -e "#!/bin/sh\necho \$TOOLS_GH_TOKEN" > "$GIT_ASKPASS_ENV"
+          GIT_ASKPASS="$GIT_ASKPASS_ENV" git clone --branch "$REPO_BRANCH" "https://$TOOLS_GH_TOKEN@$(echo $REPO_URL | sed 's|https://||')" "$REPO_DIR" > /dev/null
           rm "$GIT_ASKPASS_ENV"
         else
           git clone --branch "$REPO_BRANCH" "$REPO_URL" "$REPO_DIR" > /dev/null
@@ -62,7 +62,7 @@ tools:
       - KUBIYA_AGENT_UUID
       - KUBIYA_USER_ORG
       - KUBIYA_API_KEY
-      - GH_TOKEN
+      - TOOLS_GH_TOKEN
     with_volumes:
       - name: sqlite_data
         path: /sqlite_data
