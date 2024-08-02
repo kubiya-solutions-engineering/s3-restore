@@ -13,7 +13,7 @@ secrets            = ["TOOLS_GH_TOKEN"]
 integrations       = ["kubiyamichaelg", "slack"]
 users              = []
 groups             = ["Admin", "Users"]
-agent_tool_sources = ["https://github.com/kubiya-solutions-engineering/s3-restore/tools/*"]
+agent_tool_sources = ["https://github.com/kubiya-solutions-engineering/s3restore/tools/*"]
 links              = []
 log_level = "INFO"
 

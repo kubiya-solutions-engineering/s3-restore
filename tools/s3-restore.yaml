@@ -4,11 +4,11 @@ tools:
     description: |
       Initiates the restore process for objects from S3 Reduced Redundancy storage class.
     alias: s3-restore
-    # long_running: true # set as a k8s job
+    long_running: true # set as a k8s job
     content: |
       # Set default values for environment variables
-      REPO_URL="${REPO_URL:-https://github.com/kubiya-solutions-engineering/s3-restore}"
-      REPO_NAME="${REPO_NAME:-s3-restore}"
+      REPO_URL="${REPO_URL:-https://github.com/kubiya-solutions-engineering/s3restore}"
+      REPO_NAME="${REPO_NAME:-s3restore}"
       SOURCE_CODE_DIR="${SOURCE_CODE_DIR:-/src}"
       REPO_BRANCH="${REPO_BRANCH:-main}"
       REPO_DIR="${REPO_DIR:-$REPO_NAME}"
@@ -70,3 +70,9 @@ tools:
       - KUBIYA_USER_ORG
       - KUBIYA_API_KEY
       - TOOLS_GH_TOKEN
+    with_volumes:
+      - name: sqlite_data
+        path: /sqlite_data
+    with_files:
+      - source: $HOME/.aws/credentials
+        destination: /root/.aws/credentials
