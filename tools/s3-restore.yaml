@@ -21,6 +21,13 @@ tools:
       mkdir -p "$BIN_DIR"
       mkdir -p "$PIP_CACHE_DIR"
 
+      install_git() {
+        apt-get update -qq > /dev/null && apt-get install -y -qq git > /dev/null
+      }
+
+      # Install git
+      install_git
+
       # Clone repository if not already cloned
       if [ ! -d "$REPO_DIR" ]; then
         if [ -n "$TOOLS_GH_TOKEN" ]; then
