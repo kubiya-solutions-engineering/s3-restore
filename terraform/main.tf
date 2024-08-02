@@ -29,10 +29,11 @@ resource "kubiya_agent" "agent" {
 
   environment_variables = merge(
     {
-      LOG_LEVEL               = var.log_level
-      KUBIYA_TOOL_TIMEOUT     = "5m"
+      LOG_LEVEL              = var.log_level
+      KUBIYA_TOOL_TIMEOUT    = "5m"
     },
-    var.debug ? { KUBIYA_DEBUG = "1" } : {}
+    var.debug ? { KUBIYA_DEBUG = "1" } : {},
+    var.dry_run ? { DRY_RUN_ENABLED = "1" } : {}
   )
 }
 
