@@ -1,8 +1,7 @@
 tools:
   - name: s3-restore
     image: golang:latest
-    description: |
-      Initiates the restore process for objects from S3 Reduced Redundancy storage class.
+    description: Initiates the restore process for objects from S3 Reduced Redundancy storage class.
     alias: s3-restore
     long_running: true # set as a k8s job
     content: |
