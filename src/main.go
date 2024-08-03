@@ -104,35 +104,22 @@ func createDBAndRecord(requestID string, bucketPaths []string, ttl int) error {
 	}
 
 	blocks := []slack.Block{
-		slack.NewHeaderBlock(&slack.TextBlockObject{
-			Type: slack.PlainTextType,
-			Text: ":memo: Created database record",
-		}),
+		slack.NewHeaderBlock(slack.NewTextBlockObject(slack.PlainTextType, ":memo: Created database record", false, false)),
 		slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("*Request ID:* `%s`\n*TTL:* `%d` days\n*Created At:* `%s`\n*Updated At:* `%s`\n",
-					requestID, ttl, time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339)),
-			},
+			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Request ID:* `%s`\n*TTL:* `%d` days\n*Created At:* `%s`\n*Updated At:* `%s`\n", requestID, ttl, time.Now().UTC().Format(time.RFC3339), time.Now().UTC().Format(time.RFC3339)), false, false),
 			nil,
 			nil,
 		),
 		slack.NewDividerBlock(),
 		slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: "*Bucket Paths:*",
-			},
+			slack.NewTextBlockObject(slack.MarkdownType, "*Bucket Paths:*", false, false),
 			nil,
 			nil,
 		),
 	}
 	for _, path := range bucketPaths {
 		blocks = append(blocks, slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("- `%s`", path),
-			},
+			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("- `%s`", path), false, false),
 			nil,
 			nil,
 		))
@@ -185,53 +172,34 @@ func updateProcessedPaths(requestID, processedPath string) error {
 	}
 
 	blocks := []slack.Block{
-		slack.NewHeaderBlock(&slack.TextBlockObject{
-			Type: slack.PlainTextType,
-			Text: ":hourglass_flowing_sand: Updated database record",
-		}),
+		slack.NewHeaderBlock(slack.NewTextBlockObject(slack.PlainTextType, ":hourglass_flowing_sand: Updated database record", false, false)),
 		slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("*Request ID:* `%s`\n*Updated At:* `%s`\n",
-					requestID, time.Now().UTC().Format(time.RFC3339)),
-			},
+			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("*Request ID:* `%s`\n*Updated At:* `%s`\n", requestID, time.Now().UTC().Format(time.RFC3339)), false, false),
 			nil,
 			nil,
 		),
 		slack.NewDividerBlock(),
 		slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: "*Remaining Bucket Paths:*",
-			},
+			slack.NewTextBlockObject(slack.MarkdownType, "*Remaining Bucket Paths:*", false, false),
 			nil,
 			nil,
 		),
 	}
 	for _, path := range bp {
 		blocks = append(blocks, slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("- `%s`", path),
-			},
+			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("- `%s`", path), false, false),
 			nil,
 			nil,
 		))
 	}
 	blocks = append(blocks, slack.NewDividerBlock(), slack.NewSectionBlock(
-		&slack.TextBlockObject{
-			Type: slack.MarkdownType,
-			Text: "*Processed Paths:*",
-		},
+		slack.NewTextBlockObject(slack.MarkdownType, "*Processed Paths:*", false, false),
 		nil,
 		nil,
 	))
 	for _, path := range pp {
 		blocks = append(blocks, slack.NewSectionBlock(
-			&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: fmt.Sprintf("- `%s`", path),
-			},
+			slack.NewTextBlockObject(slack.MarkdownType, fmt.Sprintf("- `%s`", path), false, false),
 			nil,
 			nil,
 		))
@@ -251,10 +219,7 @@ func updateProcessedPaths(requestID, processedPath string) error {
 		}
 		message := fmt.Sprintf(":white_check_mark: *All paths processed for Request ID:* *%s*. *Record deleted.*\n", requestID)
 		if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), []slack.Block{
-			slack.NewSectionBlock(&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: message,
-			}, nil, nil),
+			slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, message, false, false), nil, nil),
 		}); err != nil {
 			log.Printf("Error sending Slack notification: %v\n", err)
 		}
@@ -380,10 +345,7 @@ func main() {
 		failedPathsJSON, _ := json.Marshal(failedPaths)
 		message := fmt.Sprintf(":x: *The following paths failed to be processed for Request ID:* *%s*\n*Failed Paths:* `%s`\n", requestID, failedPathsJSON)
 		if err := sendSlackNotification(os.Getenv("SLACK_CHANNEL_ID"), os.Getenv("SLACK_THREAD_TS"), []slack.Block{
-			slack.NewSectionBlock(&slack.TextBlockObject{
-				Type: slack.MarkdownType,
-				Text: message,
-			}, nil, nil),
+			slack.NewSectionBlock(slack.NewTextBlockObject(slack.MarkdownType, message, false, false), nil, nil),
 		}); err != nil {
 			log.Printf("Error sending Slack notification for failed paths: %v\n", err)
 		}
