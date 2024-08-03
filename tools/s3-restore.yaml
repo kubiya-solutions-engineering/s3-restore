@@ -1,10 +1,9 @@
-# This file contains the tool definitions for the approval calling logic
 tools:
   - name: s3-restore
     image: golang:latest
     description: Initiates the restore process for objects from S3 Reduced Redundancy storage class.
     alias: s3-restore
-    long_running: true # set as a k8s job
+    # long_running: true # set as a k8s job
     content: |
       # Set default values for environment variables
       REPO_URL="${REPO_URL:-https://github.com/kubiya-solutions-engineering/s3restore}"
