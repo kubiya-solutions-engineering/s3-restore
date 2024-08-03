@@ -59,6 +59,9 @@ func sendSlackNotification(channel, threadTS string, blocks []slack.Block) error
 		opts = append(opts, slack.MsgOptionUpdate(messageTimestamp))
 	}
 
+	// Log the blocks being sent to Slack
+	log.Printf("Sending Slack message with blocks: %+v\n", blocks)
+
 	_, newTimestamp, err := api.PostMessage(channel, opts...)
 	if err != nil {
 		log.Printf("Failed to send Slack message: %v\n", err)
