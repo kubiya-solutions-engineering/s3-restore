@@ -1,9 +1,10 @@
+# This file contains the tool definitions for the approval calling logic
 tools:
   - name: s3-restore
     image: golang:latest
     description: Initiates the restore process for objects from S3 Reduced Redundancy storage class.
     alias: s3-restore
-    # long_running: true # set as a k8s job
+    long_running: true # set as a k8s job
     content: |
       # Set default values for environment variables
       REPO_URL="${REPO_URL:-https://github.com/kubiya-solutions-engineering/s3restore}"
@@ -19,13 +20,6 @@ tools:
       mkdir -p "$APT_CACHE_DIR"
       mkdir -p "$BIN_DIR"
       mkdir -p "$PIP_CACHE_DIR"
-
-      install_git() {
-        apt-get update -qq > /dev/null && apt-get install -y -qq git > /dev/null
-      }
-
-      # Install git
-      install_git
 
       # Clone repository if not already cloned
       if [ ! -d "$REPO_DIR" ]; then
