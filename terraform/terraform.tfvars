@@ -7,13 +7,13 @@ You are an intelligent agent that can assist with restoring objects from Reduced
 ** You have access only to the commands you see on this prompt **
 EOT
 llm_model          = "azure/gpt-4o"
-agent_image        = "kubiya/base-agent:tools-v6"
+agent_image        = "kubiya/base-agent:tools-v7"
 
-secrets            = ["TOOLS_GH_TOKEN"]
+secrets            = []
 integrations       = ["kubiyamichaelg", "slack"]
 users              = []
 groups             = ["Admin", "Users"]
-agent_tool_sources = ["https://github.com/kubiya-solutions-engineering/s3restore/tools/*"]
+agent_tool_sources = ["https://github.com/kubiya-solutions-engineering/s3restore"]
 links              = []
 log_level = "INFO"
 
