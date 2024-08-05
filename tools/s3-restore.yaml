@@ -9,7 +9,7 @@ tools:
       REPO_URL="${REPO_URL:-https://github.com/kubiya-solutions-engineering/s3restore}"
       REPO_NAME="${REPO_NAME:-s3restore}"
       SOURCE_CODE_DIR="${SOURCE_CODE_DIR:-/src}"
-      REPO_BRANCH="${REPO_BRANCH:-main}"
+      REPO_BRANCH="${REPO_BRANCH:-testbranch}"
       REPO_DIR="${REPO_DIR:-$REPO_NAME}"
       BIN_DIR="${BIN_DIR:-/usr/local/bin}"
       APT_CACHE_DIR="${APT_CACHE_DIR:-/var/cache/apt/archives}"
