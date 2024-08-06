@@ -10,7 +10,7 @@ llm_model          = "azure/gpt-4o"
 agent_image        = "kubiya/base-agent:tools-v7"
 
 secrets            = ["TOOLS_GH_TOKEN"]
-integrations       = ["kubiyamichaelg", "slack"]
+integrations       = ["Kubiyamichaelg", "Slack"]
 users              = []
 groups             = ["Admin", "Users"]
 agent_tool_sources = ["https://github.com/kubiya-solutions-engineering/s3restore/tree/testbranch"]
