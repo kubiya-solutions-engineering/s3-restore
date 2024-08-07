@@ -66,5 +66,5 @@ tools:
       - name: sqlite_data
         path: /sqlite_data
     with_files:
-      - source: /$HOME/.aws
-        destination: /root/.aws
+      - source: /$HOME/.aws/credentials
+        destination: /root/.aws/credentials
