@@ -1,8 +1,8 @@
 tools:
-  - name: s3-restore
+  - name: s3-restore-non-sync
     image: golang:latest
-    description: Initiates the restore process for objects from S3 Reduced Redundancy storage class.
-    alias: s3restore
+    description: Initiates the restore process for objects from S3 Reduced Redundancy storage class non synchronous.
+    alias: s3restorenonsync
     long_running: true # set as a k8s job
     content: |
       # Set default values for environment variables
